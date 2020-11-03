@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import reactor.core.publisher.Mono;
 
@@ -31,18 +32,19 @@ public class GitHubClient {
   }
 
   public void uploadFile(Mono<GitHubFile> fileMono) {
-    fileMono.doOnSuccess(success -> logger.info("File uploaded"))
-      .subscribe(file -> {
-        String repoUrl = getDirectoryApiUrl(file.getFileName());
-        client.put()
-          .uri(repoUrl)
-          .header(HttpHeaders.ACCEPT, GITHUB_JSON)
-          .header(HttpHeaders.AUTHORIZATION, "token " + gitPersonalToken)
-          .body(fileMono, GitHubFile.class)
-          .retrieve()
-          .bodyToMono(Object.class)
-          .subscribe();
-    });
+    fileMono.subscribe(file -> {
+      String repoUrl = getDirectoryApiUrl(file.getFileName());
+      client.put()
+        .uri(repoUrl)
+        .header(HttpHeaders.ACCEPT, GITHUB_JSON)
+        .header(HttpHeaders.AUTHORIZATION, "token " + gitPersonalToken)
+        .body(fileMono, GitHubFile.class)
+        .retrieve()
+        .bodyToMono(Void.class)
+        .doOnSuccess(success -> logger.info("File {} uploaded", file.getFileName()))
+        .doOnError(WebClientResponseException.class, error -> logger.error("Error uploading file {}: {}", file.getFileName(), error.getMessage()))
+        .subscribe();
+      });
   }
 
   private String getDirectoryApiUrl(String fileName) {
